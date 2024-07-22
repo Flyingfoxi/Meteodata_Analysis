@@ -1,5 +1,5 @@
 import csv
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import matplotlib.pyplot as plt
 
@@ -17,6 +17,49 @@ def loadCSV(file, column):
         dates = [datetime.strptime(row[1].split(" ")[0], r"%Y-%m-%d") for row in content]
         data = [row[index] for row in content]
     return dates, data
+
+
+def getWeeklyArray(file, column, weekly_average=False):
+    dates, data = loadCSV(file, column)
+    array_data: dict[int: dict[int: int]] = {}
+
+    current_date = dates[0]
+    week_id: int = 0
+
+    while current_date < dates[-1]:
+        if current_date.day == 1 and current_date.month == 1:
+            week_id = (0 if current_date.weekday() == 0 else 1)
+
+        if current_date.weekday() == 0:
+            week_id += 1
+
+        if current_date.year not in array_data:
+            array_data[current_date.year] = {}
+
+        if week_id not in array_data[current_date.year]:
+            array_data[current_date.year][week_id] = {}
+
+        try:
+            if weekly_average:
+                week = array_data[current_date.year][week_id]
+                if 3 not in week:
+                    week[3] = {"count": 0, "value": 0}
+                week[3]["count"] += 1
+                week[3]["value"] += float(data[dates.index(current_date)])
+            else:
+                array_data[current_date.year][week_id][current_date.weekday()] = float(data[dates.index(current_date)])
+        except ValueError:
+            ...
+
+        current_date += timedelta(days=1)
+
+    if weekly_average:
+        for year in array_data:
+            for week in array_data[year]:
+                value = array_data[year][week][3]
+                array_data[year][week][3] = value["value"] / value["count"]
+
+    return array_data
 
 
 def getArray(file, column, month_average=False):
@@ -51,7 +94,7 @@ def getArray(file, column, month_average=False):
     return array_data
 
 
-def plotStackingArray(array_data: dict[int: dict[int: dict[int: int]]], colormap):
+def plotStackingArray(array_data: dict[int: dict[int: dict[int: int]]], colormap, typ: str = "month"):
     fig, ax = plt.subplots(figsize=(10, 6))
 
     index = 0
@@ -63,8 +106,12 @@ def plotStackingArray(array_data: dict[int: dict[int: dict[int: int]]], colormap
         for mi, month in data.items():
             for di, day in month.items():
                 try:
-                    y_map.append(day)
-                    x_map.append(sum(month_length[:mi - 1]) + di)
+                    if typ == "month":
+                        y_map.append(day)
+                        x_map.append(sum(month_length[:mi - 1]) + di)
+                    elif typ == "week":
+                        y_map.append(day)
+                        x_map.append((mi - 1) * 7 + di)
                 except ValueError:
                     continue
 
@@ -103,5 +150,4 @@ def plotArray(array_data: dict[int: dict[int: dict[int: int]]]):
 
 if __name__ == "__main__":
     array = getArray("VAL2.csv", "HS")
-    # plotStackingArray(array, "Blues")
-    # plotArray(array)
+    plotStackingArray(array, "Blues")
