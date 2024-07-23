@@ -1,7 +1,9 @@
 import csv
+import os
 from datetime import datetime, timedelta
 
 import matplotlib.pyplot as plt
+from icecream import ic
 
 month_length = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 year_length = [366, 365, 365, 365, 366, 365, 365, 365, 366, 365, 365, 365, 366, 365, 365, 365]
@@ -79,9 +81,9 @@ def getArray(file, column, month_average=False):
                 if month_index not in array_data[day.year][day.month].keys():
                     array_data[day.year][day.month][month_index] = {"count": 0, "value": 0}
                 array_data[day.year][day.month][month_index]["count"] += 1
-                array_data[day.year][day.month][month_index]["value"] += float(data[i])
+                array_data[day.year][day.month][month_index]["value"] += int(float(data[i]))
             else:
-                array_data[day.year][day.month][day.day] = float(data[i])
+                array_data[day.year][day.month][day.day] = int(float(data[i]))
         except ValueError:
             ...
 
@@ -94,35 +96,49 @@ def getArray(file, column, month_average=False):
     return array_data
 
 
-def plotStackingArray(array_data: dict[int: dict[int: dict[int: int]]], colormap, typ: str = "month"):
-    fig, ax = plt.subplots(figsize=(10, 6))
+def plotStackingArray(array_data: dict[int: dict[int: dict[int: int]]], colormap, typ: str = "monat"):
+    fig, ax = plt.subplots(figsize=(16, 10))
 
     index = 0
+    last = {"x": [], "y": []}
+
     for year, data in array_data.items():
         color = getattr(plt.cm, colormap)(index / len(array_data))
-        x_map = []
-        y_map = []
+        x_map = last["x"]
+        y_map = last["y"]
+        last = {"x": [], "y": []}
 
         for mi, month in data.items():
             for di, day in month.items():
                 try:
-                    if typ == "month":
-                        y_map.append(day)
+                    if mi == int(len(data)) and typ == "monat":
+                        last["y"].append(day)
+                        last["x"].append(sum(month_length[:mi - 1]) + di - year_length[year - 2008])
+                    y_map.append(day)
+                    if typ in ["monat", "tag"]:
                         x_map.append(sum(month_length[:mi - 1]) + di)
-                    elif typ == "week":
-                        y_map.append(day)
+                    elif typ == "woche":
                         x_map.append((mi - 1) * 7 + di)
-                except ValueError:
-                    continue
+                except ValueError as ex:
+                    print(ex)
+
+        # get the january of then next year
+        if year != list(array_data.keys())[-1]:
+            for mi, month in array_data[year + 1].items():
+                for di, day in month.items():
+                    try:
+                        y_map.append(day)
+                        if typ in ["monat", "tag"]:
+                            x_map.append(sum(month_length[:mi - 1]) + di + year_length[year - 2008])
+                        elif typ == "woche":
+                            x_map.append((mi - 1) * 7 + di + year_length[year - 2008])
+                    except ValueError as ex:
+                        print(ex)
 
         ax.plot(x_map, y_map, color=color)
         index += 1
 
     ax.set_xlim(0, 366)
-    ax.set_ylim(0, 350)
-
-    ax.set_ylabel("Schneehöhe in cm")
-
     m_d = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
     m_x = [sum(month_length[:i]) + month_length[i] / 2 for i in range(0, 12)]
     ax.set_xticks(m_x)
@@ -131,23 +147,103 @@ def plotStackingArray(array_data: dict[int: dict[int: dict[int: int]]], colormap
     sm = plt.cm.ScalarMappable(cmap=colormap, norm=plt.Normalize(vmin=min(list(array_data.keys())), vmax=max(list(array_data.keys()))))
     plt.colorbar(sm, ax=ax)
 
-    plt.show()
+    match field:
+        case "HS":
+            plt.title("Schneehöhe von " + file.split(".")[0] + f" ({typ})")
+            plt.ylabel("Schneehöhe [cm]")
+            ax.set_ylim(0, 350)
+        case "TA_30MIN_MEAN":
+            plt.title("Temperatur von " + file.split(".")[0] + f" ({typ})")
+            plt.ylabel("Temperatur [°C]")
+            ax.set_ylim(-20, 40)
+        case "DW_30MIN_MEAN":
+            plt.title("Windrichtung von " + file.split(".")[0] + f" ({typ})")
+            plt.ylabel("Windrichtung [°]")
+            y_ticks = [int(i) for i in range(0, 361, 30)]
+            y_tick_labels = [f"Norden - {i}" if i == 0 or i == 360 else
+                             f"Osten - {i}" if i == 90 else
+                             f"Süden - {i}" if i == 180 else
+                             f"Westen - {i}" if i == 270 else
+                             f"{i}" for i in y_ticks]
+            ax.set_yticks(y_ticks)
+            ax.set_yticklabels(y_tick_labels)
+            ax.set_ylim(0, 360)
+    return plt
 
 
-def plotArray(array_data: dict[int: dict[int: dict[int: int]]]):
+def plotArray(array_data: dict[int: dict[int: dict[int: int]]], colormap, typ: str = "monat"):
+
     x_map = []
     y_map = []
-
+    fig, ax = plt.subplots(figsize=(24, 8))
+    color = getattr(plt.cm, colormap)(0.7)
     for yi, year in array_data.items():
         for mi, month in year.items():
             for di, day in month.items():
                 y_map.append(day)
-                x_map.append(sum(year_length[:yi - 2008]) + sum(month_length[:mi - 1]) + di)
+                if typ in ("monat", "tag"):
+                    x_map.append(sum(year_length[:yi - 2008]) + sum(month_length[:mi - 1]) + di)
+                else:
+                    x_map.append(sum(year_length[:yi - 2008]) + (mi - 1) * 7 + di)
 
-    plt.plot(x_map, y_map)
-    plt.show()
+    ax.set_xlim(0, 5844)
+    x_ticks = [sum(year_length[:i]) for i in range(0, len(year_length) + 1)]
+    x_tick_labels = [str(i + 2008) for i in range(0, len(year_length) + 1)]
+    ax.set_xticks(x_ticks)
+    ax.set_xticklabels(x_tick_labels)
+
+    match field:
+        case "HS":
+            plt.title("Schneehöhe von " + file.split(".")[0] + f" ({typ})")
+            plt.ylabel("Schneehöhe [cm]")
+            ax.set_ylim(0, 350)
+        case "TA_30MIN_MEAN":
+            plt.title("Temperatur von " + file.split(".")[0] + f" ({typ})")
+            plt.ylabel("Temperatur [°C]")
+            ax.set_ylim(-20, 40)
+        case "DW_30MIN_MEAN":
+            plt.title("Windrichtung von " + file.split(".")[0] + f" ({typ})")
+            plt.ylabel("Windrichtung [°]")
+            y_ticks = [int(i) for i in range(0, 361, 30)]
+            y_tick_labels = [f"Norden - {i}" if i == 0 or i == 360 else
+                             f"Osten - {i}" if i == 90 else
+                             f"Süden - {i}" if i == 180 else
+                             f"Westen - {i}" if i == 270 else
+                             f"{i}" for i in y_ticks]
+            ax.set_yticks(y_ticks)
+            ax.set_yticklabels(y_tick_labels)
+            ax.set_ylim(0, 360)
+
+    plt.plot(x_map, y_map, color=color)
+    return plt
+
+
+def create_dir():
+    path = "graphs/"
+    for f_typ in ("stacked", "linear"):
+        if not os.path.exists(os.path.join(path, f_typ)):
+            os.mkdir(os.path.join(path, f_typ))
+        for f_field in ("HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN"):
+            if not os.path.exists(os.path.join(path, f_typ, f_field)):
+                os.mkdir(os.path.join(path, f_typ, f_field))
+            for f_type in ("tag", "woche", "monat"):
+                if not os.path.exists(os.path.join(path, f_typ, f_field, f_type)):
+                    os.mkdir(os.path.join(path, f_typ, f_field, f_type))
 
 
 if __name__ == "__main__":
-    array = getArray("VAL2.csv", "HS")
-    plotStackingArray(array, "Blues")
+    create_dir()
+    for field in ("HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN"):
+        for d_type in ("tag", "woche", "monat"):
+            for file in os.listdir("data/"):
+                if d_type == "woche":
+                    array = getWeeklyArray("data/" + file, field, True)
+                else:
+                    array = getArray("data/" + file, field, d_type == "monat")
+
+                d_colormap = ("Blues" if field == "HS" else "Greens" if field == "TA_30MIN_MEAN" else "Reds")
+                plotStackingArray(array, d_colormap, typ=d_type).savefig(f"graphs/stacked/{field}/{d_type}/{file.split(".")[0]}.png")
+                plt.close()
+                plotArray(array, d_colormap, typ=d_type).savefig(f"graphs/linear/{field}/{d_type}/{file.split(".")[0]}.png")
+                ic(f"saved ::: {field}/{d_type}/{file.split(".")[0]}.png as stacked & linear")
+                plt.close()
