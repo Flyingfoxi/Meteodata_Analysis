@@ -53,6 +53,7 @@ def read_niederschlag(file: str, required: list[str]):
         parsed_date = datetime.datetime.strptime(dat[1], "%Y%m%d%H")
         parsed_date.replace(tzinfo=datetime.timezone.utc)
         parsed_date -= datetime.timedelta(hours=12)
+        if parsed_date.year == 2007: continue
         measure_date = parsed_date.strftime("%Y-%m-%d %H:%M:%S%z")
         rre024i0 = dat[2]
         match station_code:

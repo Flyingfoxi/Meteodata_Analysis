@@ -13,7 +13,10 @@ def loadCSV(file, column):
     with open(file, "r") as f:
         content = [row for row in csv.reader(f)]
         header = content[0]
-        index = header.index(column)
+        try:
+            index = header.index(column)
+        except ValueError as ex:
+            raise ValueError(f"Can't find {column} in header: {header}") from ex
         content = content[1:]
 
         dates = [datetime.strptime(row[1].split(" ")[0], r"%Y-%m-%d") for row in content]
@@ -122,7 +125,7 @@ def plotStackingArray(array_data: dict[int: dict[int: dict[int: int]]], colormap
                 except ValueError as ex:
                     print(ex)
 
-        # get the january of then next year
+        # get the january of then next year for the smooth transition of years
         if year != list(array_data.keys())[-1]:
             for mi, month in array_data[year + 1].items():
                 for di, day in month.items():
@@ -168,6 +171,15 @@ def plotStackingArray(array_data: dict[int: dict[int: dict[int: int]]], colormap
             ax.set_yticks(y_ticks)
             ax.set_yticklabels(y_tick_labels)
             ax.set_ylim(0, 360)
+        case "rre024i0":
+            plt.title("Niederschlagsmenge von " + file.split(".")[0] + f" ({typ})")
+            plt.ylabel("Niederschlagsmenge [mm/24h]")
+            if typ == "tag":
+                ax.set_ylim(0, 1200)
+            elif typ == "woche":
+                ax.set_ylim(0, 350)
+            elif typ == "monat":
+                ax.set_ylim(0, 120)
     return plt
 
 
@@ -175,6 +187,7 @@ def plotArray(array_data: dict[int: dict[int: dict[int: int]]], colormap, typ: s
 
     x_map = []
     y_map = []
+
     fig, ax = plt.subplots(figsize=(24, 8))
     color = getattr(plt.cm, colormap)(0.7)
     for yi, year in array_data.items():
@@ -213,6 +226,15 @@ def plotArray(array_data: dict[int: dict[int: dict[int: int]]], colormap, typ: s
             ax.set_yticks(y_ticks)
             ax.set_yticklabels(y_tick_labels)
             ax.set_ylim(0, 360)
+        case "rre024i0":
+            plt.title("Niederschlagsmenge von " + file.split(".")[0] + f" ({typ})")
+            plt.ylabel("Niederschlagsmenge [mm/24h]")
+            if typ == "tag":
+                ax.set_ylim(0, 1200)
+            elif typ == "woche":
+                ax.set_ylim(0, 350)
+            elif typ == "monat":
+                ax.set_ylim(0, 120)
 
     plt.plot(x_map, y_map, color=color)
     return plt
@@ -220,10 +242,12 @@ def plotArray(array_data: dict[int: dict[int: dict[int: int]]], colormap, typ: s
 
 def create_dir():
     path = "graphs/"
+    if not os.path.exists(path):
+        os.mkdir(path)
     for f_typ in ("stacked", "linear"):
         if not os.path.exists(os.path.join(path, f_typ)):
             os.mkdir(os.path.join(path, f_typ))
-        for f_field in ("HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN"):
+        for f_field in ("HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN", "rre024i0"):
             if not os.path.exists(os.path.join(path, f_typ, f_field)):
                 os.mkdir(os.path.join(path, f_typ, f_field))
             for f_type in ("tag", "woche", "monat"):
@@ -233,15 +257,16 @@ def create_dir():
 
 if __name__ == "__main__":
     create_dir()
-    for field in ("HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN"):
+    for field in ("HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN", "rre024i0"):
         for d_type in ("tag", "woche", "monat"):
-            for file in os.listdir("data/common/"):
+            __dir = "data/rre024i0/" if field == "rre024i0" else "data/common/"
+            for file in os.listdir(__dir):
                 if d_type == "woche":
-                    array = getWeeklyArray("data/common/" + file, field, True)
+                    array = getWeeklyArray(__dir + file, field, True)
                 else:
-                    array = getArray("data/common/" + file, field, d_type == "monat")
+                    array = getArray(__dir + file, field, d_type == "monat")
 
-                d_colormap = ("Blues" if field == "HS" else "Greens" if field == "TA_30MIN_MEAN" else "Reds")
+                d_colormap = ("Blues" if field == "HS" else "Greens" if field == "TA_30MIN_MEAN" else "Oranges" if field == "DW_30MIN_MEAN" else "Reds")
                 plotStackingArray(array, d_colormap, typ=d_type).savefig(f"graphs/stacked/{field}/{d_type}/{file.split(".")[0]}.png")
                 plt.close()
                 plotArray(array, d_colormap, typ=d_type).savefig(f"graphs/linear/{field}/{d_type}/{file.split(".")[0]}.png")
