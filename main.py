@@ -235,11 +235,11 @@ if __name__ == "__main__":
     create_dir()
     for field in ("HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN"):
         for d_type in ("tag", "woche", "monat"):
-            for file in os.listdir("data/"):
+            for file in os.listdir("data/common/"):
                 if d_type == "woche":
-                    array = getWeeklyArray("data/" + file, field, True)
+                    array = getWeeklyArray("data/common/" + file, field, True)
                 else:
-                    array = getArray("data/" + file, field, d_type == "monat")
+                    array = getArray("data/common/" + file, field, d_type == "monat")
 
                 d_colormap = ("Blues" if field == "HS" else "Greens" if field == "TA_30MIN_MEAN" else "Reds")
                 plotStackingArray(array, d_colormap, typ=d_type).savefig(f"graphs/stacked/{field}/{d_type}/{file.split(".")[0]}.png")
