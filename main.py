@@ -141,6 +141,7 @@ def plotPointArray(array_data: dict[int: dict[str: list[float]]], colormap):
 
     return plt
 
+
 def plotStackingArray(array_data: dict[int: dict[int: dict[int: int]]], colormap, typ: str = "monat", name: str = "data", field: str = "HS"):
     fig, ax = plt.subplots(figsize=(16, 10))
 
@@ -226,7 +227,6 @@ def plotStackingArray(array_data: dict[int: dict[int: dict[int: int]]], colormap
 
 
 def plotArray(array_data: dict[int: dict[int: dict[int: int]]], colormap, typ: str = "monat", name: str = "data", field: str = "HS"):
-
     x_map = []
     y_map = []
 
@@ -278,6 +278,9 @@ def plotArray(array_data: dict[int: dict[int: dict[int: int]]], colormap, typ: s
             elif typ == "monat":
                 ax.set_ylim(0, 120)
 
+        case _:
+            raise ValueError("invalid type for 'field'")
+
     plt.plot(x_map, y_map, color=color)
     return plt
 
@@ -306,14 +309,14 @@ def create_files():
                 if type_ == "woche":
                     array = getWeeklyArray(dir_ + d_file, field, True)
                 else:
-                    array = getArray(dir_ + d_file, field, d_type == "monat")
+                    array = getArray(dir_ + d_file, field, type_ == "monat")
 
                 d_colormap = ("Blues" if field == "HS" else "Greens" if field == "TA_30MIN_MEAN" else "Oranges" if field == "DW_30MIN_MEAN" else "Reds")
-                plotStackingArray(array, d_colormap, typ=d_type).savefig(f"graphs/stacked/{field}/{d_type}/{d_file.split(".")[0]}.png")
+                plotStackingArray(array, d_colormap, typ=type_).savefig(f"graphs/stacked/{field}/{type_}/{d_file.split(".")[0]}.png");
                 plt.close()
-                plotArray(array, d_colormap, typ=d_type).savefig(f"graphs/linear/{field}/{d_type}/{d_file.split(".")[0]}.png")
-                print(f"saved ::: {field}/{d_type}/{d_file.split(".")[0]}.png as stacked & linear")
+                plotArray(array, d_colormap, typ=type_).savefig(f"graphs/linear/{field}/{type_}/{d_file.split(".")[0]}.png");
                 plt.close()
+                print(f"saved ::: {field}/{type_}/{d_file.split(".")[0]}.png as stacked & linear")
 
 
 if __name__ == "__main__":
