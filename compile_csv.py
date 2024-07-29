@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 date of creation:   06.06.2024
-filename:           csv_reader.py
+filename:           compile_csv.py
 coded by:           Flyingfoxi
 """
+
 import datetime
 import os
 
@@ -21,7 +22,7 @@ def write_file(data: list[list[str]], file: str) -> None:
         f.write(values)
 
 
-def edit_file(name: str, required_data: list[str], time_format="%Y%m%d%H", seperator=","):
+def edit_file(name: str, required_data: list[str], time_format="%Y-%m-%d %H:%M:%S%z", seperator=",", common=False):
     data, header = read_file(name, seperator)
 
     year_count = list(range(2008, 2024))
@@ -36,7 +37,7 @@ def edit_file(name: str, required_data: list[str], time_format="%Y%m%d%H", seper
         except ValueError:
             ...
 
-    write_file(new_data, "data/" + name.split("/")[1])
+    write_file(new_data, ("data/common/" if common else "data/") + name.split("/")[1])
 
 
 def read_niederschlag(file: str, required: list[str]):
@@ -68,7 +69,13 @@ def read_niederschlag(file: str, required: list[str]):
     os.remove("data/" + file.split("/")[1])
 
 
+def main():
+    edit_file("raw/JUL2.csv", ["station_code", "measure_date", "HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN"], common=True)
+    edit_file("raw/JUL2.csv", ["station_code", "measure_date", "HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN"], common=True)
+    edit_file("raw/JUL2.csv", ["station_code", "measure_date", "HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN"], common=True)
+    read_niederschlag("raw/niederschlag.csv", ["stn", "time", "rre024i0"])
+    print("Successfully compiled the files")
 
 
 if __name__ == '__main__':
-    read_niederschlag("raw/niederschlag.csv", ["stn", "time", "rre024i0"])
+    main()
