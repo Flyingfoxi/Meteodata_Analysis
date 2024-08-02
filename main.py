@@ -18,7 +18,7 @@ month_length = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 year_length = [366, 365, 365, 365, 366, 365, 365, 365, 366, 365, 365, 365, 366, 365, 365, 365]
 
 
-class array(BaseModel):
+class Array(BaseModel):
     typ: str
     name: str
     data: Dict[int, Dict[int, Dict[int, int]]] | Dict[int, Dict[str, List[float]]]  # day-based / point-based
@@ -42,7 +42,7 @@ def loadCSV(file, column):
     return dates, data
 
 
-def _getWeekBasedArray(file, column, weekly_average=True) -> array:
+def _getWeekBasedArray(file, column, weekly_average=True) -> Array:
     dates, data = loadCSV(file, column)
     array_data: dict[int: dict[int: int]] = {}
 
@@ -82,14 +82,14 @@ def _getWeekBasedArray(file, column, weekly_average=True) -> array:
                 value = array_data[year][week][3]
                 array_data[year][week][3] = value["value"] / value["count"]
 
-    _array = array(typ="woche",
+    _array = Array(typ="woche",
                    name=file.split("/")[-1].split(".")[0],
                    columns=["measure_date", column],
                    data=array_data)
     return _array
 
 
-def _getDayBasedArray(file, column, month_average=False) -> array:
+def _getDayBasedArray(file, column, month_average=False) -> Array:
     dates, data = loadCSV(file, column)
     array_data: dict[int: dict[int: dict[int: int]]] = {}
 
@@ -118,40 +118,20 @@ def _getDayBasedArray(file, column, month_average=False) -> array:
                 value = array_data[year][month][int(month_length[month - 1] / 2)]
                 array_data[year][month][int(month_length[month - 1] / 2)] = value["value"] / value["count"]
 
-    _array = array(typ=("monat" if month_average else "tag"),
+    _array = Array(typ=("monat" if month_average else "tag"),
                    name=file.split("/")[-1].split(".")[0],
                    columns=["measure_date", column],
                    data=array_data)
     return _array
 
 
-def _getPointBasedArray(file: str, key, value, key_file: str | None = None) -> array:
+def _getPointBasedArray(file: str, key, value) -> Array:
     assert ("measure_date" not in (key, value)), "key or value can't be measure_date, use getArray"
 
-    if key_file is None:
-        key_file = file
-
-    k_datum, k_data = loadCSV(key_file, key)
+    k_datum, k_data = loadCSV(file, key)
     v_datum, v_data = loadCSV(file, value)
 
-    if k_datum != v_datum:
-        dates: List[datetime] = []
-        removed = 0
-        for i, date in enumerate(k_datum):
-            if date in v_datum:
-                dates.append(date)
-            else:
-                k_data.pop(i - removed)
-                removed += 1
-
-        removed = 0
-        for i, date in enumerate(v_datum):
-            if date not in dates:
-                v_data.pop(i - removed)
-                removed += 1
-
-    else:
-        dates = v_datum
+    dates = v_datum
 
     if not len(k_data) == len(v_data) == len(dates):
         raise ValueError
@@ -169,14 +149,14 @@ def _getPointBasedArray(file: str, key, value, key_file: str | None = None) -> a
             if len(array_data[day.year]["y_map"]) > len(array_data[day.year]["x_map"]):
                 array_data[day.year]["y_map"].remove(array_data[day.year]["y_map"][-1])
 
-    _array = array(typ="points",
+    _array = Array(typ="points",
                    name=file.split("/")[-1].split(".")[0],
                    columns=[key, value],
                    data=array_data)
     return _array
 
 
-def _plotPointArray(array_data: array, colormap):
+def _plotPointArray(array_data: Array, colormap):
     fig, ax = plt.subplots(figsize=(16, 10))
 
     for yi, year in array_data.data.items():
@@ -192,7 +172,7 @@ def _plotPointArray(array_data: array, colormap):
     return plt
 
 
-def _plotStackingArray(array_data: array, colormap: str):
+def _plotStackingArray(array_data: Array, colormap: str):
     array_data.colormap = colormap
     fig, ax = plt.subplots(figsize=(16, 10))
 
@@ -240,7 +220,7 @@ def _plotStackingArray(array_data: array, colormap: str):
     return plt
 
 
-def _plotLinearArray(array_data: array, colormap):
+def _plotLinearArray(array_data: Array, colormap):
     x_map = []
     y_map = []
 
@@ -268,7 +248,7 @@ def _plotLinearArray(array_data: array, colormap):
     return plt
 
 
-def plotArray(array_data: array, colormap: str, plot_typ: str = "stacked") -> plt:
+def plotArray(array_data: Array, colormap: str, plot_typ: str = "stacked") -> plt:
     assert (plot_typ in ("stacked", "linear")), f"'{plot_typ}' must be either 'stacked' or 'linear'"
     assert (colormap in colormaps), "colormap must be available in matplotlib.colormap"
 
@@ -283,9 +263,9 @@ def plotArray(array_data: array, colormap: str, plot_typ: str = "stacked") -> pl
         return _plotLinearArray(array_data, colormap)
 
 
-def getArray(file: str, value: str, key: str = "measure_date", key_file: str | None = None, typ: str = "tag") -> array:
+def getArray(file: str, value: str, key: str = "measure_date", typ: str = "tag") -> Array:
     if key != "measure_date":
-        return _getPointBasedArray(file, key=key, value=value, key_file=key_file)
+        return _getPointBasedArray(file, key=key, value=value)
 
     if typ == "woche":
         return _getWeekBasedArray(file, value)
@@ -293,7 +273,7 @@ def getArray(file: str, value: str, key: str = "measure_date", key_file: str | N
         return _getDayBasedArray(file, value, bool(typ == "monat"))
 
 
-def _xy_labeling(array_data: array, ax) -> None:
+def _xy_labeling(array_data: Array, ax) -> None:
     for i, typ in enumerate("xy"):
 
         enable_ticks = False
@@ -381,32 +361,35 @@ def create_dir():
 
 
 def main():
+    import compile_csv
+    compile_csv.main()
+
     create_dir()
 
     # linear and stacked graphs
+    dir_ = "data/"
     for field in ("HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN", "rre024i0"):
-        for type_ in ("tag", "woche", "monat"):
-            dir_ = "data/rre024i0/" if field == "rre024i0" else "data/common/"
-            for d_file in os.listdir(dir_):
-                _array = getArray(dir_ + d_file, field, typ=type_)
+        for file in os.listdir(dir_):
+            if file == "VAL2.csv" and field == "rre024i0":
+                continue
+
+            for type_ in ("tag", "woche", "monat"):
+                _array = getArray(dir_ + file, field, typ=type_)
                 _colormap = ("Blues" if field == "HS" else "Greens" if field == "TA_30MIN_MEAN" else "Oranges" if field == "DW_30MIN_MEAN" else "Reds")
 
                 plotArray(_array, _colormap, plot_typ="stacked")
-                plt.savefig(f"graphs/stacked/{field}/{type_}/{d_file.split(".")[0]}.png")
+                plt.savefig(f"graphs/stacked/{field}/{type_}/{file.split(".")[0]}.png")
                 plt.close()
 
                 plotArray(_array, _colormap, plot_typ="linear")
-                plt.savefig(f"graphs/linear/{field}/{type_}/{d_file.split(".")[0]}.png")
+                plt.savefig(f"graphs/linear/{field}/{type_}/{file.split(".")[0]}.png")
                 plt.close()
 
-                print(f"saved ::: {field}/{type_}/{d_file.split(".")[0]}.png as stacked & linear")
+                print(f"saved ::: {field}/{type_}/{file.split(".")[0]}.png as stacked & linear")
 
-        # dependent graphs (on TA_30MIN_MEAN)
-        if field != "TA_30MIN_MEAN":
-            dir_ = "data/rre024i0/" if field == "rre024i0" else "data/common/"
-            for file in os.listdir(dir_):
-                _key_file = (None if dir_ == "data/common" else "data_common")
-                _array = getArray(file=dir_ + file, value=field, key_file="data/common/" + file, key="TA_30MIN_MEAN", typ="points")
+            # dependent graphs (on TA_30MIN_MEAN)
+            if field != "TA_30MIN_MEAN":
+                _array = getArray(file=dir_ + file, value=field, key="TA_30MIN_MEAN", typ="points")
                 _colormap = ("Blues" if field == "HS" else "Oranges" if field == "DW_30MIN_MEAN" else "Reds")
 
                 plotArray(_array, _colormap)
