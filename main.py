@@ -125,16 +125,37 @@ def _getDayBasedArray(file, column, month_average=False) -> array:
     return _array
 
 
-def _getPointBasedArray(file: str, key, value) -> array:
+def _getPointBasedArray(file: str, key, value, key_file: str | None = None) -> array:
     assert ("measure_date" not in (key, value)), "key or value can't be measure_date, use getArray"
 
-    k_datum, k_data = loadCSV(file, key)
+    if key_file is None:
+        key_file = file
+
+    k_datum, k_data = loadCSV(key_file, key)
     v_datum, v_data = loadCSV(file, value)
 
     if k_datum != v_datum:
+        dates: List[datetime] = []
+        removed = 0
+        for i, date in enumerate(k_datum):
+            if date in v_datum:
+                dates.append(date)
+            else:
+                k_data.pop(i - removed)
+                removed += 1
+
+        removed = 0
+        for i, date in enumerate(v_datum):
+            if date not in dates:
+                v_data.pop(i - removed)
+                removed += 1
+
+    else:
+        dates = v_datum
+
+    if not len(k_data) == len(v_data) == len(dates):
         raise ValueError
 
-    dates = v_datum
     array_data = {}
 
     for i, day in enumerate(dates):
@@ -155,12 +176,12 @@ def _getPointBasedArray(file: str, key, value) -> array:
     return _array
 
 
-# noinspection PyTypeChecker
 def _plotPointArray(array_data: array, colormap):
     fig, ax = plt.subplots(figsize=(16, 10))
 
     for yi, year in array_data.data.items():
         color = getattr(plt.cm, colormap)((yi - 2008) / len(array_data.data))
+        # noinspection PyTypeChecker
         ax.scatter(year["x_map"], year["y_map"], color=color, label=str(yi), s=3)
 
     sm = plt.cm.ScalarMappable(cmap=colormap, norm=plt.Normalize(vmin=min(list(array_data.data.keys())), vmax=max(list(array_data.data.keys()))))
@@ -262,9 +283,9 @@ def plotArray(array_data: array, colormap: str, plot_typ: str = "stacked") -> pl
         return _plotLinearArray(array_data, colormap)
 
 
-def getArray(file: str, value: str, key: str = "measure_date", typ: str = "tag") -> array:
+def getArray(file: str, value: str, key: str = "measure_date", key_file: str | None = None, typ: str = "tag") -> array:
     if key != "measure_date":
-        return _getPointBasedArray(file, key=key, value=value)
+        return _getPointBasedArray(file, key=key, value=value, key_file=key_file)
 
     if typ == "woche":
         return _getWeekBasedArray(file, value)
@@ -342,20 +363,27 @@ def create_dir():
     path = "graphs/"
     if not os.path.exists(path):
         os.mkdir(path)
-    for f_typ in ("stacked", "linear"):
-        if not os.path.exists(os.path.join(path, f_typ)):
-            os.mkdir(os.path.join(path, f_typ))
-        for f_field in ("HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN", "rre024i0"):
-            if not os.path.exists(os.path.join(path, f_typ, f_field)):
-                os.mkdir(os.path.join(path, f_typ, f_field))
-            for f_type in ("tag", "woche", "monat"):
-                if not os.path.exists(os.path.join(path, f_typ, f_field, f_type)):
-                    os.mkdir(os.path.join(path, f_typ, f_field, f_type))
+    for typ in ("stacked", "linear"):
+        if not os.path.exists(os.path.join(path, typ)):
+            os.mkdir(os.path.join(path, typ))
+        for field in ("HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN", "rre024i0"):
+            if not os.path.exists(os.path.join(path, typ, field)):
+                os.mkdir(os.path.join(path, typ, field))
+            for type_ in ("tag", "woche", "monat"):
+                if not os.path.exists(os.path.join(path, typ, field, type_)):
+                    os.mkdir(os.path.join(path, typ, field, type_))
+
+    if not os.path.exists(os.path.join(path, "dependent")):
+        os.mkdir(os.path.join(path, "dependent"))
+    for type_ in ("HS", "DW_30MIN_MEAN", "rre024i0"):
+        if not os.path.exists(os.path.join(path, "dependent", type_)):
+            os.mkdir(os.path.join(path, "dependent", type_))
 
 
 def main():
     create_dir()
 
+    # linear and stacked graphs
     for field in ("HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN", "rre024i0"):
         for type_ in ("tag", "woche", "monat"):
             dir_ = "data/rre024i0/" if field == "rre024i0" else "data/common/"
@@ -372,6 +400,20 @@ def main():
                 plt.close()
 
                 print(f"saved ::: {field}/{type_}/{d_file.split(".")[0]}.png as stacked & linear")
+
+        # dependent graphs (on TA_30MIN_MEAN)
+        if field != "TA_30MIN_MEAN":
+            dir_ = "data/rre024i0/" if field == "rre024i0" else "data/common/"
+            for file in os.listdir(dir_):
+                _key_file = (None if dir_ == "data/common" else "data_common")
+                _array = getArray(file=dir_ + file, value=field, key_file="data/common/" + file, key="TA_30MIN_MEAN", typ="points")
+                _colormap = ("Blues" if field == "HS" else "Oranges" if field == "DW_30MIN_MEAN" else "Reds")
+
+                plotArray(_array, _colormap)
+                plt.savefig(f"graphs/dependent/{field}/{file.split(".")[0]}.png")
+                plt.close()
+
+                print(f"saved ::: {field}/{file.split('.')[0]}.png as dependent")
 
 
 if __name__ == "__main__":

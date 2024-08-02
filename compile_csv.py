@@ -32,7 +32,10 @@ def edit_file(name: str, required_data: list[str], time_format="%Y-%m-%d %H:%M:%
     for dat in data:
         try:
             time = datetime.datetime.strptime(dat[header.index(required_data[1])], time_format)
-            if time.hour == 00 and time.year in year_count:
+            if common:
+                if time.hour == 12 and time.minute == 0 and time.year in year_count:
+                    new_data.append([dat[i] for i in used_index])
+            elif time.hour == 00 and time.year in year_count:
                 new_data.append([dat[i] for i in used_index])
         except ValueError:
             ...
@@ -41,7 +44,7 @@ def edit_file(name: str, required_data: list[str], time_format="%Y-%m-%d %H:%M:%
 
 
 def read_niederschlag(file: str, required: list[str]):
-    edit_file(file, required, seperator=";")
+    edit_file(file, required, seperator=";", time_format="%Y%m%d%H")
 
     data, header = read_file("data/" + file.split("/")[1])
     new_data = {
@@ -70,9 +73,10 @@ def read_niederschlag(file: str, required: list[str]):
 
 
 def main():
+    print("starting to compile ...")
     edit_file("raw/JUL2.csv", ["station_code", "measure_date", "HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN"], common=True)
-    edit_file("raw/JUL2.csv", ["station_code", "measure_date", "HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN"], common=True)
-    edit_file("raw/JUL2.csv", ["station_code", "measure_date", "HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN"], common=True)
+    edit_file("raw/URS2.csv", ["station_code", "measure_date", "HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN"], common=True)
+    edit_file("raw/VAL2.csv", ["station_code", "measure_date", "HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN"], common=True)
     read_niederschlag("raw/niederschlag.csv", ["stn", "time", "rre024i0"])
     print("Successfully compiled the files")
 
