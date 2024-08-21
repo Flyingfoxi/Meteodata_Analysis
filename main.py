@@ -8,14 +8,21 @@ coded by:           Flyingfoxi
 import csv
 import os
 from datetime import datetime, timedelta
-from typing import Dict, List
+from typing import Dict, Iterable, List
 
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib import colormaps
 from pydantic import BaseModel
 
 month_length = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 year_length = [366, 365, 365, 365, 366, 365, 365, 365, 366, 365, 365, 365, 366, 365, 365, 365]
+
+font_header = {"style": "normal", "name": "Ubuntu", "size": 18}
+font_labeling = {"style": "normal", "name": "Ubuntu", "size": 14}
+font_ticks = {"style": "italic", "name": "Ubuntu", "size": 10}
+
+__all__ = ["Array", "plotArray", "getArray"]
 
 
 class Array(BaseModel):
@@ -25,6 +32,7 @@ class Array(BaseModel):
     columns: List[str]
     colormap: str = "Blues"
     plot_typ: str = "stacked"
+    display_typ: str
 
 
 def loadCSV(file, column):
@@ -82,10 +90,12 @@ def _getWeekBasedArray(file, column, weekly_average=True) -> Array:
                 value = array_data[year][week][3]
                 array_data[year][week][3] = value["value"] / value["count"]
 
-    _array = Array(typ="woche",
+    _array = Array(typ="week",
                    name=file.split("/")[-1].split(".")[0],
                    columns=["measure_date", column],
-                   data=array_data)
+                   data=array_data,
+                   display_typ="Woche")
+
     return _array
 
 
@@ -118,10 +128,11 @@ def _getDayBasedArray(file, column, month_average=False) -> Array:
                 value = array_data[year][month][int(month_length[month - 1] / 2)]
                 array_data[year][month][int(month_length[month - 1] / 2)] = value["value"] / value["count"]
 
-    _array = Array(typ=("monat" if month_average else "tag"),
+    _array = Array(typ=("month" if month_average else "day"),
                    name=file.split("/")[-1].split(".")[0],
                    columns=["measure_date", column],
-                   data=array_data)
+                   data=array_data,
+                   display_typ=("monat" if month_average else "tag").capitalize())
     return _array
 
 
@@ -152,7 +163,8 @@ def _getPointBasedArray(file: str, key, value) -> Array:
     _array = Array(typ="points",
                    name=file.split("/")[-1].split(".")[0],
                    columns=[key, value],
-                   data=array_data)
+                   data=array_data,
+                   display_typ="Tag")
     return _array
 
 
@@ -188,13 +200,13 @@ def _plotStackingArray(array_data: Array, colormap: str):
         for mi, month in data.items():
             for di, day in month.items():
                 try:
-                    if mi == int(len(data)) and array_data.typ == "monat":
+                    if mi == int(len(data)) and array_data.typ == "month":
                         last["y"].append(day)
                         last["x"].append(sum(month_length[:mi - 1]) + di - year_length[year - 2008])
                     y_map.append(day)
-                    if array_data.typ in ["monat", "tag"]:
+                    if array_data.typ in ["month", "day"]:
                         x_map.append(sum(month_length[:mi - 1]) + di)
-                    elif array_data.typ == "woche":
+                    elif array_data.typ == "week":
                         x_map.append((mi - 1) * 7 + di)
                 except ValueError as ex:
                     print(ex)
@@ -205,9 +217,9 @@ def _plotStackingArray(array_data: Array, colormap: str):
                 for di, day in month.items():
                     try:
                         y_map.append(day)
-                        if array_data.typ in ["monat", "tag"]:
+                        if array_data.typ in ["month", "day"]:
                             x_map.append(sum(month_length[:mi - 1]) + di + year_length[year - 2008])
-                        elif array_data.typ == "woche":
+                        elif array_data.typ == "week":
                             x_map.append((mi - 1) * 7 + di + year_length[year - 2008])
                     except ValueError as ex:
                         print(ex)
@@ -231,7 +243,7 @@ def _plotLinearArray(array_data: Array, colormap):
         for mi, month in year.items():
             for di, day in month.items():
                 y_map.append(day)
-                if array_data.typ in ("monat", "tag"):
+                if array_data.typ in ("month", "day"):
                     x_map.append(sum(year_length[:yi - 2008]) + sum(month_length[:mi - 1]) + di)
                 else:
                     x_map.append(sum(year_length[:yi - 2008]) + (mi - 1) * 7 + di)
@@ -244,7 +256,18 @@ def _plotLinearArray(array_data: Array, colormap):
 
     _xy_labeling(array_data, ax)
 
+    x = np.array(x_map)
+    y = np.array(y_map)
+
+    slope, intercept = np.polyfit(x, y, 1)
+    trend_line = slope * x + intercept
+
     plt.plot(x_map, y_map, color=color)
+    plt.plot(x_map, trend_line, color='darkred')
+
+    ax.text(ax.get_xlim()[1] * 0.99, ax.get_ylim()[1] * 0.972, f"Equation of the trend line: y = {slope:.5f}x + {intercept:.2f}", style='italic',
+            fontsize=10, bbox={"facecolor": "lightgrey", "alpha": 0.5, "pad": 5}, ha="right", va="top")
+
     return plt
 
 
@@ -263,37 +286,38 @@ def plotArray(array_data: Array, colormap: str, plot_typ: str = "stacked") -> pl
         return _plotLinearArray(array_data, colormap)
 
 
-def getArray(file: str, value: str, key: str = "measure_date", typ: str = "tag") -> Array:
+def getArray(file: str, value: str, key: str = "measure_date", typ: str = "day") -> Array:
     if key != "measure_date":
         return _getPointBasedArray(file, key=key, value=value)
 
-    if typ == "woche":
+    if typ == "week":
         return _getWeekBasedArray(file, value)
     else:
-        return _getDayBasedArray(file, value, bool(typ == "monat"))
+        return _getDayBasedArray(file, value, bool(typ == "month"))
 
 
-def _xy_labeling(array_data: Array, ax) -> None:
+def _xy_labeling(array_data: Array, ax: plt.Axes) -> None:
     for i, typ in enumerate("xy"):
 
-        enable_ticks = False
+        enable_ticks = True
         ticks = []
-        tick_labels = []
-        lim = ()
+        tick_labels: Iterable | None = None
         label = ""
 
         match array_data.columns[i]:
             case "HS":
-                plt.title("Schneehöhe von " + array_data.name + f" ({array_data.typ})")
+                plt.title("Schneehöhe von " + array_data.name + f" ({array_data.display_typ})", fontdict=font_header)
                 label = "Schneehöhe [cm]"
                 lim = (0, 350)
+                ticks = [i for i in range(0, 400, 50)]
             case "TA_30MIN_MEAN":
-                plt.title("Temperatur von " + array_data.name + f" ({array_data.typ})")
+                plt.title("Temperatur von " + array_data.name + f" ({array_data.display_typ})", fontdict=font_header)
                 label = "Temperatur [°C]"
                 lim = (-20, 40)
+                ticks = [i for i in range(-20, 50, 10)]
             case "DW_30MIN_MEAN":
                 enable_ticks = True
-                plt.title("Windrichtung von " + array_data.name + f" ({array_data.typ})")
+                plt.title("Windrichtung von " + array_data.name + f" ({array_data.display_typ})", fontdict=font_header)
                 label = "Windrichtung [°]"
                 ticks = [int(i) for i in range(0, 361, 30)]
                 tick_labels = [f"Norden - {i}" if i == 0 or i == 360 else
@@ -303,16 +327,20 @@ def _xy_labeling(array_data: Array, ax) -> None:
                                f"{i}" for i in ticks]
                 lim = (0, 360)
             case "rre024i0":
-                plt.title("Niederschlagsmenge von " + array_data.name + f" ({array_data.typ})")
-                label = "Niederschlagsmenge [mm/24h]"
-                if array_data.typ == "tag":
+                plt.title("Niederschlagsmenge von " + array_data.name + f" ({array_data.display_typ})", fontdict=font_header)
+                label = "Niederschlagsmenge [mm/Tag]"
+                if array_data.typ == "day":
                     lim = (0, 1200)
-                elif array_data.typ == "woche":
+                    ticks = [i for i in range(0, 1300, 100)]
+                elif array_data.typ == "week":
                     lim = (0, 350)
-                elif array_data.typ == "monat":
+                    ticks = [i for i in range(0, 400, 50)]
+                elif array_data.typ == "month":
                     lim = (0, 120)
+                    ticks = [i for i in range(0, 130, 10)]
                 else:
                     lim = (0, 500)
+                    ticks = [i for i in range(0, 501, 75)]
 
             case "measure_date":
                 enable_ticks = True
@@ -323,7 +351,11 @@ def _xy_labeling(array_data: Array, ax) -> None:
                     lim = (0, 366)
 
                     sm = plt.cm.ScalarMappable(cmap=array_data.colormap, norm=plt.Normalize(vmin=min(list(array_data.data.keys())), vmax=max(list(array_data.data.keys()))))
-                    plt.colorbar(sm, ax=ax)
+                    cb = plt.colorbar(sm, ax=ax)
+                    cb.ax.set_yticks((cmap_ticks := [i for i in range(2008, 2024, 1)]))
+                    cb.ax.set_yticklabels([str(i) for i in cmap_ticks], fontdict=font_ticks)
+
+
                 else:
                     tick_labels = [str(i) for i in range(2008, 2025)]
                     ticks = [sum(year_length[:i]) for i in range(len(year_length) + 1)]
@@ -334,9 +366,11 @@ def _xy_labeling(array_data: Array, ax) -> None:
 
         if enable_ticks:
             getattr(ax, "set_" + typ + "ticks")(ticks)
-            getattr(ax, "set_" + typ + "ticklabels")(tick_labels)
+            if tick_labels is None:
+                tick_labels = [str(i) for i in ticks]
+            getattr(ax, "set_" + typ + "ticklabels")(tick_labels, fontdict=font_ticks)
         getattr(ax, "set_" + typ + "lim")(lim)
-        getattr(ax, "set_" + typ + "label")(label)
+        getattr(ax, "set_" + typ + "label")(label, fontdict=font_labeling)
 
 
 def create_dir():
@@ -349,7 +383,7 @@ def create_dir():
         for field in ("HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN", "rre024i0"):
             if not os.path.exists(os.path.join(path, typ, field)):
                 os.mkdir(os.path.join(path, typ, field))
-            for type_ in ("tag", "woche", "monat"):
+            for type_ in ("day", "week", "month"):
                 if not os.path.exists(os.path.join(path, typ, field, type_)):
                     os.mkdir(os.path.join(path, typ, field, type_))
 
@@ -373,7 +407,7 @@ def main():
             if file == "VAL2.csv" and field == "rre024i0":
                 continue
 
-            for type_ in ("tag", "woche", "monat"):
+            for type_ in ("day", "week", "month"):
                 _array = getArray(dir_ + file, field, typ=type_)
                 _colormap = ("Blues" if field == "HS" else "Greens" if field == "TA_30MIN_MEAN" else "Oranges" if field == "DW_30MIN_MEAN" else "Reds")
 
