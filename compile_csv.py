@@ -29,6 +29,8 @@ def edit_file(name: str, required_data: list[str], time_format="%Y-%m-%d %H:%M:%
     used_index = [header.index(i) for i in required_data]
     new_data = [[header[i] for i in used_index]]
 
+    print(len(data))
+
     for dat in data:
         try:
             time = datetime.datetime.strptime(dat[header.index(required_data[1])], time_format)
@@ -115,12 +117,40 @@ def fuse_files(file1, file2, sep=","):
     return header + data
 
 
+def get_trend(file: str, months: list[int], required: str, time_format="%Y-%m-%d %H:%M:%S%z"):
+    content, header = read_file(file)
+    index = header.index(required)
+    date_index = header.index("measure_date")
+    station_code = content[0][header.index("station_code")]
+
+    output = {}
+
+    for data in content:
+        try:
+            time = datetime.datetime.strptime(data[date_index], time_format)
+            if time.month in months:
+                output.setdefault(time.year, []).append(float(data[index]))
+        except ValueError:
+            ...
+
+    compiled = [["station_code", "measure_year", required]]
+
+    for year, values in output.items():
+        average = sum(values) / len(values)
+        compiled.append([station_code, str(year), str(average)])
+
+    write_file(compiled, "data/trend-" + file.split("/")[1])
+
+
+
 def main():
     print("starting to compile ...")
     edit_file("raw/JUL2.csv", ["station_code", "measure_date", "HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN"])
     edit_file("raw/URS2.csv", ["station_code", "measure_date", "HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN"])
     edit_file("raw/VAL2.csv", ["station_code", "measure_date", "HS", "TA_30MIN_MEAN", "DW_30MIN_MEAN"])
     collect_rainfall("raw/niederschlag.csv", ["stn", "time", "rre024i0"])
+    get_trend("raw/JUL2.csv", [11, 12, 1, 2, 3, 4], "HS")
+    get_trend("raw/VAL2.csv", [11, 12, 1, 2, 3, 4], "HS")
     print("basic completed, fusing the files ...")
     fuse_files("data/JUL2.csv", "data/_JUL2.csv")
     fuse_files("data/URS2.csv", "data/_URS2.csv")
